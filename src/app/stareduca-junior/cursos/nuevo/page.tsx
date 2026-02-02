@@ -87,21 +87,29 @@ export default function NuevoCursoPage() {
       if (error) throw error;
 
       // Si el curso está publicado, crear notificaciones para todos los estudiantes
+      // Nota: Las notificaciones son opcionales, no bloquean la creación del curso
       if (formData.is_published) {
-        const { data: students } = await supabase
-          .from('students')
-          .select('id');
+        try {
+          const { data: students } = await supabase
+            .from('students')
+            .select('id');
 
-        if (students && students.length > 0) {
-          const notifications = students.map((student) => ({
-            student_id: student.id,
-            type: 'course',
-            title: 'Nuevo curso disponible',
-            message: formData.title,
-            data: { courseId: data.id },
-          }));
+          if (students && students.length > 0) {
+            const notifications = students.map((student) => ({
+              student_id: student.id,
+              type: 'course',
+              title: 'Nuevo curso disponible',
+              message: formData.title,
+              data: { courseId: data.id },
+            }));
 
-          await supabase.from('notifications').insert(notifications);
+            const { error: notifError } = await supabase.from('notifications').insert(notifications);
+            if (notifError) {
+              console.warn('No se pudieron crear notificaciones:', notifError.message);
+            }
+          }
+        } catch (notifErr) {
+          console.warn('Error al crear notificaciones:', notifErr);
         }
       }
 

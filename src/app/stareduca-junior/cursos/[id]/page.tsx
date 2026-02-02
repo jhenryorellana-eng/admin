@@ -166,21 +166,29 @@ export default function EditarCursoPage() {
       if (error) throw error;
 
       // Si el curso se publica por primera vez, crear notificaciones
+      // Nota: Las notificaciones son opcionales, no bloquean la actualización del curso
       if (formData.is_published && !wasPublished) {
-        const { data: students } = await supabase
-          .from('students')
-          .select('id');
+        try {
+          const { data: students } = await supabase
+            .from('students')
+            .select('id');
 
-        if (students && students.length > 0) {
-          const notifications = students.map((student) => ({
-            student_id: student.id,
-            type: 'course',
-            title: 'Nuevo curso disponible',
-            message: formData.title,
-            data: { courseId },
-          }));
+          if (students && students.length > 0) {
+            const notifications = students.map((student) => ({
+              student_id: student.id,
+              type: 'course',
+              title: 'Nuevo curso disponible',
+              message: formData.title,
+              data: { courseId },
+            }));
 
-          await supabase.from('notifications').insert(notifications);
+            const { error: notifError } = await supabase.from('notifications').insert(notifications);
+            if (notifError) {
+              console.warn('No se pudieron crear notificaciones:', notifError.message);
+            }
+          }
+        } catch (notifErr) {
+          console.warn('Error al crear notificaciones:', notifErr);
         }
 
         setWasPublished(true);
