@@ -92,6 +92,7 @@ export interface Database {
           id: string
           module_id: string
           title: string
+          description: string | null
           video_url: string | null
           duration_minutes: number | null
           xp_reward: number

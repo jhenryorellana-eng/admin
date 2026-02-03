@@ -95,6 +95,7 @@ export default function ModulosPage() {
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [lessonForm, setLessonForm] = useState({
     title: '',
+    description: '',
     duration_minutes: 0,
     xp_reward: 25,
   });
@@ -281,6 +282,7 @@ export default function ModulosPage() {
       setEditingLesson(lesson);
       setLessonForm({
         title: lesson.title,
+        description: lesson.description || '',
         duration_minutes: lesson.duration_minutes || 0,
         xp_reward: lesson.xp_reward,
       });
@@ -299,6 +301,7 @@ export default function ModulosPage() {
       setEditingLesson(null);
       setLessonForm({
         title: '',
+        description: '',
         duration_minutes: 0,
         xp_reward: 25,
       });
@@ -348,6 +351,7 @@ export default function ModulosPage() {
           .from('lessons')
           .update({
             title: lessonForm.title,
+            description: lessonForm.description || null,
             video_url: newVideoUrl,
             duration_minutes: lessonForm.duration_minutes || null,
             xp_reward: lessonForm.xp_reward,
@@ -364,6 +368,7 @@ export default function ModulosPage() {
                 ? {
                     ...l,
                     title: lessonForm.title,
+                    description: lessonForm.description || null,
                     video_url: newVideoUrl,
                     duration_minutes: lessonForm.duration_minutes || null,
                     xp_reward: lessonForm.xp_reward,
@@ -384,6 +389,7 @@ export default function ModulosPage() {
           .insert({
             module_id: selectedModuleId,
             title: lessonForm.title,
+            description: lessonForm.description || null,
             video_url: null, // Will update after upload
             duration_minutes: lessonForm.duration_minutes || null,
             xp_reward: lessonForm.xp_reward,
@@ -791,6 +797,19 @@ export default function ModulosPage() {
             placeholder="Ej: Introduccion al ahorro"
             autoFocus
           />
+
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1">
+              Descripcion
+            </label>
+            <textarea
+              value={lessonForm.description}
+              onChange={(e) => setLessonForm({ ...lessonForm, description: e.target.value })}
+              placeholder="Describe el contenido de esta leccion..."
+              rows={3}
+              className="w-full rounded-lg border border-surface-300 px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none resize-none"
+            />
+          </div>
 
           <FileUpload
             label="Video de la leccion"
