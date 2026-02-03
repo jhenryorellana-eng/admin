@@ -11,6 +11,7 @@ import {
   CardTitle,
   CardContent,
   Input,
+  Select,
   Modal,
   ModalFooter,
   Spinner,
@@ -32,6 +33,43 @@ type Lesson = Tables<'lessons'>;
 interface ModuleWithLessons extends Module {
   lessons: Lesson[];
 }
+
+interface Material {
+  id: string;
+  lesson_id: string;
+  title: string;
+  type: 'pdf' | 'image' | 'video' | 'audio' | 'url';
+  file_path: string | null;
+  external_url: string | null;
+  order_index: number;
+}
+
+const MATERIAL_TYPES = [
+  { value: 'pdf', label: 'PDF', color: 'bg-red-100 text-red-600' },
+  { value: 'image', label: 'Imagen', color: 'bg-emerald-100 text-emerald-600' },
+  { value: 'video', label: 'Video Extra', color: 'bg-blue-100 text-blue-600' },
+  { value: 'audio', label: 'Audio', color: 'bg-purple-100 text-purple-600' },
+  { value: 'url', label: 'Enlace Web', color: 'bg-orange-100 text-orange-600' },
+];
+
+const getMaterialStyle = (type: string) => {
+  return MATERIAL_TYPES.find((t) => t.value === type) || MATERIAL_TYPES[0];
+};
+
+const getAcceptByType = (type: string) => {
+  switch (type) {
+    case 'pdf':
+      return '.pdf';
+    case 'image':
+      return 'image/*';
+    case 'video':
+      return 'video/*';
+    case 'audio':
+      return 'audio/*';
+    default:
+      return '*';
+  }
+};
 
 export default function ModulosPage() {
   const router = useRouter();
@@ -66,6 +104,15 @@ export default function ModulosPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [existingVideoUrl, setExistingVideoUrl] = useState<string | null>(null);
   const [originalVideoUrl, setOriginalVideoUrl] = useState<string | null>(null);
+
+  // Materials state
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
+  const [materialType, setMaterialType] = useState<string>('pdf');
+  const [materialTitle, setMaterialTitle] = useState('');
+  const [materialUrl, setMaterialUrl] = useState('');
+  const [materialFile, setMaterialFile] = useState<File | null>(null);
+  const [isSavingMaterial, setIsSavingMaterial] = useState(false);
 
   // Handle video metadata extraction
   const handleVideoMetadata = (metadata: VideoMetadata) => {
@@ -228,7 +275,7 @@ export default function ModulosPage() {
   };
 
   // Lesson functions
-  const openLessonModal = (moduleId: string, lesson?: Lesson) => {
+  const openLessonModal = async (moduleId: string, lesson?: Lesson) => {
     setSelectedModuleId(moduleId);
     if (lesson) {
       setEditingLesson(lesson);
@@ -240,6 +287,14 @@ export default function ModulosPage() {
       setExistingVideoUrl(lesson.video_url || null);
       setOriginalVideoUrl(lesson.video_url || null);
       setVideoFile(null);
+
+      // Load materials for this lesson
+      const { data: materialsData } = await supabase
+        .from('lesson_materials')
+        .select('*')
+        .eq('lesson_id', lesson.id)
+        .order('order_index');
+      setMaterials(materialsData || []);
     } else {
       setEditingLesson(null);
       setLessonForm({
@@ -250,6 +305,7 @@ export default function ModulosPage() {
       setExistingVideoUrl(null);
       setOriginalVideoUrl(null);
       setVideoFile(null);
+      setMaterials([]);
     }
     setIsLessonModalOpen(true);
   };
@@ -378,6 +434,20 @@ export default function ModulosPage() {
           await deleteFileByUrl(lesson.video_url);
         }
 
+        // Delete all materials from storage
+        const { data: lessonMaterials } = await supabase
+          .from('lesson_materials')
+          .select('*')
+          .eq('lesson_id', lesson.id);
+
+        if (lessonMaterials) {
+          for (const material of lessonMaterials) {
+            if (material.file_path && isStorageUrl(material.file_path)) {
+              await deleteFileByUrl(material.file_path);
+            }
+          }
+        }
+
         const { error } = await supabase.from('lessons').delete().eq('id', lesson.id);
         if (error) throw error;
 
@@ -392,6 +462,88 @@ export default function ModulosPage() {
         addToast({ type: 'error', title: 'Error', message: error.message });
       }
     });
+  };
+
+  // Material functions
+  const openMaterialModal = () => {
+    setMaterialType('pdf');
+    setMaterialTitle('');
+    setMaterialUrl('');
+    setMaterialFile(null);
+    setIsMaterialModalOpen(true);
+  };
+
+  const saveMaterial = async () => {
+    if (!editingLesson) return;
+    if (!materialTitle.trim()) {
+      addToast({ type: 'error', title: 'Error', message: 'El titulo es obligatorio' });
+      return;
+    }
+    if (materialType === 'url' && !materialUrl.trim()) {
+      addToast({ type: 'error', title: 'Error', message: 'La URL es obligatoria' });
+      return;
+    }
+    if (materialType !== 'url' && !materialFile) {
+      addToast({ type: 'error', title: 'Error', message: 'Selecciona un archivo' });
+      return;
+    }
+
+    setIsSavingMaterial(true);
+
+    try {
+      let filePath: string | null = null;
+      let externalUrl: string | null = null;
+
+      if (materialType === 'url') {
+        externalUrl = materialUrl;
+      } else if (materialFile) {
+        const path = generateLessonMaterialPath(editingLesson.id, materialFile.name);
+        filePath = await uploadFile(path, materialFile);
+        if (!filePath) {
+          throw new Error('No se pudo subir el archivo');
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('lesson_materials')
+        .insert({
+          lesson_id: editingLesson.id,
+          title: materialTitle,
+          type: materialType,
+          file_path: filePath,
+          external_url: externalUrl,
+          order_index: materials.length,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setMaterials([...materials, data]);
+      setIsMaterialModalOpen(false);
+      addToast({ type: 'success', title: 'Material agregado' });
+    } catch (error: any) {
+      addToast({ type: 'error', title: 'Error', message: error.message });
+    } finally {
+      setIsSavingMaterial(false);
+    }
+  };
+
+  const deleteMaterial = async (material: Material) => {
+    try {
+      // Delete file from storage if exists
+      if (material.file_path && isStorageUrl(material.file_path)) {
+        await deleteFileByUrl(material.file_path);
+      }
+
+      const { error } = await supabase.from('lesson_materials').delete().eq('id', material.id);
+      if (error) throw error;
+
+      setMaterials(materials.filter((m) => m.id !== material.id));
+      addToast({ type: 'success', title: 'Material eliminado' });
+    } catch (error: any) {
+      addToast({ type: 'error', title: 'Error', message: error.message });
+    }
   };
 
   const toggleModule = (moduleId: string) => {
@@ -680,6 +832,162 @@ export default function ModulosPage() {
               min={0}
             />
           </div>
+
+          {/* Materials Section - only show when editing */}
+          {editingLesson && (
+            <div className="border-t border-surface-200 pt-4 mt-2">
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-sm font-medium text-surface-700">
+                  Materiales de la leccion
+                </label>
+                <Button size="sm" variant="secondary" onClick={openMaterialModal}>
+                  <svg
+                    className="w-4 h-4 mr-1"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 4v16m8-8H4"
+                    />
+                  </svg>
+                  Agregar
+                </Button>
+              </div>
+
+              {materials.length === 0 ? (
+                <p className="text-surface-400 text-sm text-center py-4 bg-surface-50 rounded-lg">
+                  Sin materiales adicionales
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {materials.map((material) => {
+                    const style = getMaterialStyle(material.type);
+                    return (
+                      <div
+                        key={material.id}
+                        className="flex items-center gap-3 p-3 bg-surface-50 rounded-lg"
+                      >
+                        <div
+                          className={`w-9 h-9 rounded-lg flex items-center justify-center ${style.color}`}
+                        >
+                          {material.type === 'pdf' && (
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                              />
+                            </svg>
+                          )}
+                          {material.type === 'image' && (
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                              />
+                            </svg>
+                          )}
+                          {material.type === 'video' && (
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                              />
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                          )}
+                          {material.type === 'audio' && (
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+                              />
+                            </svg>
+                          )}
+                          {material.type === 'url' && (
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                              />
+                            </svg>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-surface-900 truncate">
+                            {material.title}
+                          </p>
+                          <p className="text-xs text-surface-400">{style.label}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => deleteMaterial(material)}
+                          className="p-1.5 text-surface-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <ModalFooter>
           <Button variant="secondary" onClick={() => setIsLessonModalOpen(false)}>
@@ -687,6 +995,73 @@ export default function ModulosPage() {
           </Button>
           <Button onClick={saveLesson} isLoading={isSavingLesson}>
             {editingLesson ? 'Guardar' : 'Crear'}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Material Modal */}
+      <Modal
+        isOpen={isMaterialModalOpen}
+        onClose={() => setIsMaterialModalOpen(false)}
+        title="Agregar Material"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <Select
+            label="Tipo de material"
+            value={materialType}
+            onChange={(e) => {
+              setMaterialType(e.target.value);
+              setMaterialFile(null);
+              setMaterialUrl('');
+            }}
+            options={MATERIAL_TYPES.map((t) => ({ value: t.value, label: t.label }))}
+          />
+
+          <Input
+            label="Titulo *"
+            value={materialTitle}
+            onChange={(e) => setMaterialTitle(e.target.value)}
+            placeholder="Ej: Guia de conceptos basicos"
+          />
+
+          {materialType === 'url' ? (
+            <Input
+              label="URL *"
+              value={materialUrl}
+              onChange={(e) => setMaterialUrl(e.target.value)}
+              placeholder="https://ejemplo.com/herramienta"
+              type="url"
+            />
+          ) : (
+            <FileUpload
+              label="Archivo *"
+              value={materialFile}
+              onChange={setMaterialFile}
+              accept={getAcceptByType(materialType)}
+              showPreview={materialType === 'image'}
+              showVideoPreview={materialType === 'video'}
+              maxSize={materialType === 'video' ? 100 * 1024 * 1024 : 50 * 1024 * 1024}
+              helperText={
+                materialType === 'pdf'
+                  ? 'PDF. Maximo 50MB.'
+                  : materialType === 'image'
+                    ? 'JPG, PNG, WebP. Maximo 50MB.'
+                    : materialType === 'video'
+                      ? 'MP4, WebM. Maximo 100MB.'
+                      : materialType === 'audio'
+                        ? 'MP3, WAV, M4A. Maximo 50MB.'
+                        : 'Maximo 50MB.'
+              }
+            />
+          )}
+        </div>
+        <ModalFooter>
+          <Button variant="secondary" onClick={() => setIsMaterialModalOpen(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={saveMaterial} isLoading={isSavingMaterial}>
+            Agregar
           </Button>
         </ModalFooter>
       </Modal>

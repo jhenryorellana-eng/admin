@@ -28,7 +28,7 @@ export type BadgeRarity =
   | 'epic'
   | 'legendary';
 
-export type MaterialType = 'pdf' | 'image' | 'video' | 'url';
+export type MaterialType = 'pdf' | 'image' | 'video' | 'audio' | 'url';
 
 export interface Database {
   public: {
