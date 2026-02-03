@@ -16,6 +16,7 @@ import {
   Spinner,
   Badge,
   FileUpload,
+  VideoMetadata,
 } from '@/components/ui';
 import { useToastStore, useConfirmStore } from '@/stores/admin-store';
 import {
@@ -65,6 +66,19 @@ export default function ModulosPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [existingVideoUrl, setExistingVideoUrl] = useState<string | null>(null);
   const [originalVideoUrl, setOriginalVideoUrl] = useState<string | null>(null);
+
+  // Handle video metadata extraction
+  const handleVideoMetadata = (metadata: VideoMetadata) => {
+    setLessonForm((prev) => ({
+      ...prev,
+      duration_minutes: metadata.duration,
+    }));
+    addToast({
+      type: 'info',
+      title: 'Duracion detectada',
+      message: `El video dura ${metadata.duration} minuto${metadata.duration !== 1 ? 's' : ''}`,
+    });
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -638,9 +652,11 @@ export default function ModulosPage() {
                 setExistingVideoUrl(null);
               }
             }}
+            onVideoMetadata={handleVideoMetadata}
             accept="video/*"
             showPreview={false}
-            helperText="MP4, WebM. Maximo 100MB. Se subira al guardar."
+            showVideoPreview={true}
+            helperText="MP4, WebM. Maximo 100MB. La duracion se detectara automaticamente."
             maxSize={100 * 1024 * 1024}
           />
 
