@@ -102,3 +102,14 @@ export const SENIOR_MATERIAL_TYPES = [
   { value: 'pdf', label: 'PDF', accept: '.pdf', maxSize: 50 * 1024 * 1024 },
   { value: 'link', label: 'Enlace Web', accept: '', maxSize: 0 },
 ] as const;
+
+// Tipos de inteligencia para StarReads
+export const INTELLIGENCE_TYPES = [
+  { value: 'mental', label: 'Mental' },
+  { value: 'emocional', label: 'Emocional' },
+  { value: 'social', label: 'Social' },
+  { value: 'financiera', label: 'Financiera' },
+  { value: 'creativa', label: 'Creativa' },
+  { value: 'fisica', label: 'Física' },
+  { value: 'espiritual', label: 'Espiritual' },
+] as const;
