@@ -245,6 +245,14 @@ export default function IdeasPage() {
         .from('books')
         .update({ total_ideas: ideas.length + 1 })
         .eq('id', bookId);
+
+      // Notificar a usuarios via mini app bridge
+      await supabaseStarReads.from('notifications').insert({
+        type: 'new_idea',
+        title: 'Nueva idea disponible',
+        message: `"${form.title.trim()}" del libro "${bookTitle}" ya está disponible`,
+        data: { ideaId: data.id, bookId: bookId, bookTitle },
+      });
     } catch (error: any) {
       console.error('Error creating idea:', error);
       addToast({ type: 'error', title: 'Error', message: error.message });
