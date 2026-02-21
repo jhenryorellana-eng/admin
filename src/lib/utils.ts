@@ -113,3 +113,12 @@ export const INTELLIGENCE_TYPES = [
   { value: 'fisica', label: 'Física' },
   { value: 'espiritual', label: 'Espiritual' },
 ] as const;
+
+export const STARVOICES_CATEGORIES = [
+  { value: 'comunicacion', label: 'Comunicacion Digital' },
+  { value: 'tecnologia', label: 'Tecnologia y Adolescentes' },
+  { value: 'emocional', label: 'Inteligencia Emocional' },
+  { value: 'educacion', label: 'Motivacion Escolar' },
+  { value: 'relaciones', label: 'Relaciones Familiares' },
+  { value: 'bienestar', label: 'Bienestar Familiar' },
+];
