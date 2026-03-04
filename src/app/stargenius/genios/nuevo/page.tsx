@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabaseStarReads } from '@/lib/supabase/starreads-client';
+import { supabaseStarGenius } from '@/lib/supabase/stargenius-client';
 import {
   Button,
   Card,
@@ -15,37 +15,38 @@ import {
 } from '@/components/ui';
 import { useToastStore } from '@/stores/admin-store';
 import { slugify } from '@/lib/utils';
-import { uploadFileStarReads, generateBookCoverPath } from '@/lib/supabase/starreads-storage';
+import { uploadFileStarGenius, generateGeniusPortraitPath } from '@/lib/supabase/stargenius-storage';
 
-export default function NuevoLibroPage() {
+export default function NuevoGenioPage() {
   const router = useRouter();
   const { addToast } = useToastStore();
   const [isLoading, setIsLoading] = useState(false);
-  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [portraitFile, setPortraitFile] = useState<File | null>(null);
   const [formData, setFormData] = useState({
-    title: '',
+    name: '',
     slug: '',
-    author: '',
+    field: '',
+    era: '',
     description: '',
     is_published: false,
   });
 
-  const handleTitleChange = (title: string) => {
+  const handleNameChange = (name: string) => {
     setFormData({
       ...formData,
-      title,
-      slug: slugify(title),
+      name,
+      slug: slugify(name),
     });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.title || !formData.author) {
+    if (!formData.name || !formData.field) {
       addToast({
         type: 'error',
         title: 'Error de validacion',
-        message: 'El titulo y el autor son obligatorios',
+        message: 'El nombre y el campo/disciplina son obligatorios',
       });
       return;
     }
@@ -53,27 +54,28 @@ export default function NuevoLibroPage() {
     setIsLoading(true);
 
     try {
-      // Subir portada si existe
+      // Subir retrato si existe
       const tempId = crypto.randomUUID();
-      let coverUrl: string | null = null;
+      let portraitUrl: string | null = null;
 
-      if (coverFile) {
-        const path = generateBookCoverPath(tempId, coverFile.name);
-        coverUrl = await uploadFileStarReads(path, coverFile);
+      if (portraitFile) {
+        const path = generateGeniusPortraitPath(tempId, portraitFile.name);
+        portraitUrl = await uploadFileStarGenius(path, portraitFile);
 
-        if (!coverUrl) {
-          throw new Error('No se pudo subir la imagen de portada');
+        if (!portraitUrl) {
+          throw new Error('No se pudo subir el retrato');
         }
       }
 
-      const { data, error } = await supabaseStarReads
-        .from('books')
+      const { data, error } = await supabaseStarGenius
+        .from('geniuses')
         .insert({
-          title: formData.title,
-          slug: formData.slug || slugify(formData.title),
-          author: formData.author,
+          name: formData.name,
+          slug: formData.slug || slugify(formData.name),
+          field: formData.field,
+          era: formData.era || null,
           description: formData.description || null,
-          cover_url: coverUrl,
+          portrait_url: portraitUrl,
           is_published: formData.is_published,
           published_at: formData.is_published ? new Date().toISOString() : null,
         })
@@ -84,29 +86,29 @@ export default function NuevoLibroPage() {
 
       addToast({
         type: 'success',
-        title: 'Libro creado',
-        message: `"${formData.title}" ha sido creado exitosamente`,
+        title: 'Genio creado',
+        message: `"${formData.name}" ha sido creado exitosamente`,
       });
 
       // Notificar a usuarios
       try {
-        await supabaseStarReads.from('notifications').insert({
-          type: 'new_book',
-          title: 'Nuevo libro disponible',
-          message: `"${formData.title}" de ${formData.author} ya está disponible`,
-          data: { bookId: data.id },
+        await supabaseStarGenius.from('notifications').insert({
+          type: 'new_genius',
+          title: 'Nuevo genio disponible',
+          message: `"${formData.name}" (${formData.field}) ya está disponible`,
+          data: { geniusId: data.id },
         });
       } catch (e) {
         console.error('Error sending notification:', e);
       }
 
-      router.push(`/starreads/libros/${data.id}`);
+      router.push(`/stargenius/genios/${data.id}`);
     } catch (error: any) {
-      console.error('Error creating book:', error);
+      console.error('Error creating genius:', error);
       addToast({
         type: 'error',
         title: 'Error',
-        message: error.message || 'No se pudo crear el libro',
+        message: error.message || 'No se pudo crear el genio',
       });
     } finally {
       setIsLoading(false);
@@ -126,8 +128,8 @@ export default function NuevoLibroPage() {
           </svg>
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-surface-900">Nuevo Libro</h1>
-          <p className="text-surface-500">Agrega un nuevo libro a StarReads</p>
+          <h1 className="text-2xl font-bold text-surface-900">Nuevo Genio</h1>
+          <p className="text-surface-500">Agrega una nueva persona ilustre a StarGenius</p>
         </div>
       </div>
 
@@ -135,14 +137,14 @@ export default function NuevoLibroPage() {
       <form onSubmit={handleSubmit}>
         <Card>
           <CardHeader>
-            <CardTitle>Informacion del Libro</CardTitle>
+            <CardTitle>Informacion del Genio</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <Input
-              label="Titulo del libro *"
-              value={formData.title}
-              onChange={(e) => handleTitleChange(e.target.value)}
-              placeholder="Ej: Padre Rico Padre Pobre"
+              label="Nombre del genio *"
+              value={formData.name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              placeholder="Ej: Leonardo da Vinci"
               required
             />
 
@@ -150,33 +152,41 @@ export default function NuevoLibroPage() {
               label="Slug (URL)"
               value={formData.slug}
               onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-              placeholder="padre-rico-padre-pobre"
-              hint="Se genera automaticamente del titulo. Puedes editarlo manualmente."
+              placeholder="leonardo-da-vinci"
+              hint="Se genera automaticamente del nombre. Puedes editarlo manualmente."
             />
 
             <Input
-              label="Autor *"
-              value={formData.author}
-              onChange={(e) => setFormData({ ...formData, author: e.target.value })}
-              placeholder="Ej: Robert Kiyosaki"
+              label="Campo/Disciplina *"
+              value={formData.field}
+              onChange={(e) => setFormData({ ...formData, field: e.target.value })}
+              placeholder="Ej: Arte, Ciencia, Ingenieria"
               required
+            />
+
+            <Input
+              label="Era"
+              value={formData.era}
+              onChange={(e) => setFormData({ ...formData, era: e.target.value })}
+              placeholder="Ej: Renacimiento, Siglo XX"
+              hint="Periodo historico del genio (opcional)"
             />
 
             <Textarea
               label="Descripcion"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Describe brevemente de que trata el libro..."
+              placeholder="Describe brevemente a esta persona ilustre..."
               rows={4}
             />
 
             <FileUpload
-              label="Imagen de portada"
-              value={coverFile}
-              onChange={setCoverFile}
+              label="Retrato"
+              value={portraitFile}
+              onChange={setPortraitFile}
               accept="image/*"
               showPreview={true}
-              helperText="PNG, JPG o WebP. Maximo 10MB. Se subira al guardar el libro."
+              helperText="PNG, JPG o WebP. Maximo 10MB. Se subira al guardar el genio."
             />
 
             <div className="flex items-center gap-3">
@@ -192,9 +202,9 @@ export default function NuevoLibroPage() {
                 <div className="w-11 h-6 bg-surface-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/25 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
               </label>
               <div>
-                <p className="font-medium text-surface-900">Publicar libro</p>
+                <p className="font-medium text-surface-900">Publicar genio</p>
                 <p className="text-sm text-surface-500">
-                  Si esta desactivado, el libro quedara como borrador
+                  Si esta desactivado, el genio quedara como borrador
                 </p>
               </div>
             </div>
@@ -207,7 +217,7 @@ export default function NuevoLibroPage() {
             Cancelar
           </Button>
           <Button type="submit" isLoading={isLoading}>
-            Crear Libro
+            Crear Genio
           </Button>
         </div>
       </form>
